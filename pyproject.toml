@@ -1,0 +1,179 @@
+[tool.poetry]
+name = "music-universe-bot"
+version = "1.0.0"
+description = "Полнофункциональный музыкальный бот для Telegram"
+authors = ["Music Bot Team <team@musicbot.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/your-org/music-universe-bot"
+repository = "https://github.com/your-org/music-universe-bot"
+documentation = "https://docs.musicbot.com"
+keywords = ["telegram", "bot", "music", "streaming", "aiogram", "fastapi"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+aiogram = "^3.13.1"
+fastapi = "^0.115.4"
+uvicorn = {extras = ["standard"], version = "^0.32.1"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.36"}
+asyncpg = "^0.29.0"
+alembic = "^1.13.3"
+aioredis = "^2.0.1"
+redis = "^5.1.1"
+aiohttp = "^3.10.11"
+httpx = "^0.27.2"
+pydantic = "^2.10.2"
+pydantic-settings = "^2.6.1"
+celery = {extras = ["redis"], version = "^5.4.0"}
+flower = "^2.0.1"
+yt-dlp = "^2024.12.13"
+librosa = "^0.10.2"
+soundfile = "^0.12.1"
+mutagen = "^1.47.0"
+spotipy = "^2.24.0"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+python-multipart = "^0.0.12"
+structlog = "^24.4.0"
+python-json-logger = "^2.0.7"
+prometheus-client = "^0.21.0"
+minio = "^7.2.9"
+pillow = "^11.0.0"
+meilisearch = "^0.31.5"
+clickhouse-driver = "^0.2.9"
+python-dotenv = "^1.0.1"
+typer = "^0.15.1"
+rich = "^13.9.4"
+croniter = "^5.0.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+black = "^24.10.0"
+isort = "^5.13.2"
+flake8 = "^7.1.1"
+mypy = "^1.13.0"
+pre-commit = "^3.6.0"
+httpx = "^0.27.2"
+
+[tool.poetry.scripts]
+bot = "app.bot.main:main"
+api = "app.api.main:main"
+migrate = "scripts.migrate:main"
+init-db = "scripts.init_db:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# === BLACK CODE FORMATTING ===
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+# === ISORT IMPORT SORTING ===
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_glob = ["*/migrations/*"]
+
+# === MYPY TYPE CHECKING ===
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "aioredis.*",
+    "librosa.*", 
+    "soundfile.*",
+    "mutagen.*",
+    "yt_dlp.*",
+    "spotipy.*",
+    "minio.*",
+    "meilisearch.*",
+    "clickhouse_driver.*"
+]
+ignore_missing_imports = true
+
+# === PYTEST TESTING ===
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80"
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+# === COVERAGE ===
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*", 
+    "*/venv/*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError"
+]

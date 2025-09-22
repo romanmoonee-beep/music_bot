@@ -1,0 +1,64 @@
+# docker/Dockerfile.api
+FROM python:3.12-slim
+
+# Метаданные
+LABEL maintainer="Music Bot Team"
+LABEL description="Music Universe Bot - Admin API"
+LABEL version="1.0.0"
+
+# Устанавливаем системные зависимости
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    libssl-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем пользователя для запуска приложения
+RUN useradd --create-home --shell /bin/bash api
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем файлы зависимостей
+COPY requirements.txt pyproject.toml ./
+
+# Обновляем pip и устанавливаем Poetry
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir poetry
+
+# Конфигурируем Poetry
+RUN poetry config virtualenvs.create false
+
+# Устанавливаем зависимости Python
+RUN poetry install --only=main --no-dev
+
+# Копируем исходный код
+COPY app/ ./app/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
+# Создаем необходимые директории
+RUN mkdir -p /app/logs /app/temp
+
+# Устанавливаем права доступа
+RUN chown -R api:api /app
+
+# Переключаемся на пользователя api
+USER api
+
+# Переменные окружения
+ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Порты
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+# Команда по умолчанию
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]

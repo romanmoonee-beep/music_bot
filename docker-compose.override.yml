@@ -1,0 +1,230 @@
+# docker-compose.override.yml - Development overrides
+# Этот файл автоматически используется в development окружении
+
+version: '3.8'
+
+services:
+  # === PostgreSQL Development Settings ===
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: music_bot_dev
+      POSTGRES_USER: music_bot
+      POSTGRES_PASSWORD: dev_password
+    command: |
+      postgres 
+        -c log_statement=all
+        -c log_min_duration_statement=0
+        -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+        -c shared_preload_libraries=pg_stat_statements
+
+  # === Redis Development Settings ===
+  redis:
+    ports:
+      - "6379:6379"
+    command: |
+      redis-server 
+        --requirepass dev_password
+        --appendonly yes
+        --loglevel verbose
+        --save 60 10
+
+  # === ClickHouse Development Settings ===
+  clickhouse:
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    environment:
+      CLICKHOUSE_DB: music_analytics_dev
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: dev_password
+
+  # === MeiliSearch Development Settings ===
+  meilisearch:
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_MASTER_KEY: dev_master_key
+      MEILI_ENV: development
+      MEILI_LOG_LEVEL: DEBUG
+
+  # === MinIO Development Settings ===
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+
+  # === Bot Development Settings ===
+  bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.bot
+      target: development  # Если используете multi-stage build
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql+asyncpg://music_bot:dev_password@postgres:5432/music_bot_dev
+      - REDIS_URL=redis://:dev_password@redis:6379/0
+      - ENVIRONMENT=development
+    volumes:
+      # Монтируем код для hot reload в development
+      - ./app:/app/app:ro
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    ports:
+      - "8000:8000"
+      - "8080:8080"  # Дополнительный порт для отладки
+    command: |
+      sh -c "
+        echo 'Waiting for dependencies...' &&
+        sleep 10 &&
+        echo 'Running migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting bot in development mode...' &&
+        python -m app.bot.main
+      "
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # === API Development Settings ===
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql+asyncpg://music_bot:dev_password@postgres:5432/music_bot_dev
+      - REDIS_URL=redis://:dev_password@redis:6379/0
+      - ENVIRONMENT=development
+    volumes:
+      - ./app:/app/app:ro
+      - ./logs:/app/logs
+    ports:
+      - "8001:8001"
+    command: |
+      uvicorn app.api.main:app 
+        --reload 
+        --host 0.0.0.0 
+        --port 8001 
+        --reload-dir /app/app
+        --log-level debug
+    restart: unless-stopped
+
+  # === Celery Worker Development Settings ===
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql+asyncpg://music_bot:dev_password@postgres:5432/music_bot_dev
+      - REDIS_URL=redis://:dev_password@redis:6379/0
+      - CELERY_BROKER_URL=redis://:dev_password@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:dev_password@redis:6379/2
+      - ENVIRONMENT=development
+    volumes:
+      - ./app:/app/app:ro
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    command: |
+      celery -A app.tasks.celery worker 
+        --loglevel=debug 
+        --concurrency=2
+        --pool=solo
+        --autoscale=4,1
+    restart: unless-stopped
+
+  # === Celery Beat Development Settings ===
+  celery_beat:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./app:/app/app:ro
+    command: |
+      celery -A app.tasks.celery beat 
+        --loglevel=debug
+        --schedule=/tmp/celerybeat-schedule
+        --pidfile=/tmp/celerybeat.pid
+    restart: unless-stopped
+
+  # === Development Tools ===
+  
+  # Flower для мониторинга Celery
+  flower:
+    image: mher/flower:latest
+    container_name: music_bot_flower
+    environment:
+      - CELERY_BROKER_URL=redis://:dev_password@redis:6379/1
+      - FLOWER_PORT=5555
+    ports:
+      - "5555:5555"
+    networks:
+      - music_bot_network
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # MailHog для тестирования email
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: music_bot_mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - music_bot_network
+    restart: unless-stopped
+
+  # Redis Commander для управления Redis
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: music_bot_redis_commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:dev_password
+    ports:
+      - "8081:8081"
+    networks:
+      - music_bot_network
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # pgAdmin для управления PostgreSQL
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: music_bot_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@musicbot.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "8082:80"
+    networks:
+      - music_bot_network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  pgadmin_data:
+    driver: local
+
+# === Development Network ===
+networks:
+  music_bot_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
